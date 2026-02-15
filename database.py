@@ -10,14 +10,8 @@ from typing import Any
 
 import chromadb
 from langchain_core.documents import Document
-from langchain_ollama import OllamaEmbeddings
-
-from config import (
-    CHROMA_COLLECTION,
-    CHROMA_DB_PATH,
-    EMBEDDING_MODEL,
-    SQLITE_DB_PATH,
-)
+from config import CHROMA_COLLECTION, CHROMA_DB_PATH, SQLITE_DB_PATH
+from chromadb.utils import embedding_functions
 
 # ---------------------------------------------------------------------------
 # Project root – all relative paths resolve from here
@@ -44,33 +38,35 @@ def run_sql_query(query: str) -> list[dict[str, Any]]:
 # Chroma helpers
 # ---------------------------------------------------------------------------
 _chroma_client: chromadb.ClientAPI | None = None
-_embeddings: OllamaEmbeddings | None = None
+_embedding_fn = None
 
 
 def _get_chroma_collection() -> chromadb.Collection:
-    global _chroma_client
+    global _chroma_client, _embedding_fn
     if _chroma_client is None:
         _chroma_client = chromadb.PersistentClient(path=str(_ROOT / CHROMA_DB_PATH))
-    return _chroma_client.get_collection(CHROMA_COLLECTION)
-
-
-def _get_embeddings() -> OllamaEmbeddings:
-    global _embeddings
-    if _embeddings is None:
-        _embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
-    return _embeddings
+    if _embedding_fn is None:
+        _embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+    
+    return _chroma_client.get_collection(
+        CHROMA_COLLECTION, 
+        embedding_function=_embedding_fn
+    )
 
 
 def query_chroma(query: str, n_results: int = 6) -> list[Document]:
-    """Embed *query* and retrieve the top-n Chroma documents."""
+    """Retrieve top-n documents from Chroma using its native embedding function."""
     col = _get_chroma_collection()
-    emb = _get_embeddings()
-    query_vec = emb.embed_query(query)
-    results = col.query(query_embeddings=[query_vec], n_results=n_results)
+    # Chroma handles embedding automatically when query_texts is used
+    results = col.query(query_texts=[query], n_results=n_results)
+    
     docs: list[Document] = []
+    if not results or not results["documents"]:
+        return docs
+
     for i, doc_text in enumerate(results["documents"][0]):
         meta = results["metadatas"][0][i] if results["metadatas"] else {}
-        distance = results["distances"][0][i] if results["distances"] else None
+        distance = results["distances"][0][i] if "distances" in results and results["distances"] else None
         meta["distance"] = distance
         docs.append(Document(page_content=doc_text, metadata=meta))
     return docs

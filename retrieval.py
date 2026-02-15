@@ -16,7 +16,8 @@ def _llm(temperature: float = 0) -> ChatOpenAI:
         model=LLM_MODEL, 
         openai_api_key=API_KEY,
         openai_api_base=API_BASE_URL,
-        temperature=temperature
+        temperature=temperature,
+        streaming=True
     )
 
 
