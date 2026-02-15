@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    # Ensure the app can reach Ollama running on the host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # If using Ollama on host, you might need to point the base URL to host.docker.internal
+      # OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
