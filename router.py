@@ -11,8 +11,9 @@ _ROUTER_PROMPT = """\
 You are a query classifier for an H2 Economics study assistant.
 
 Given the user's query, classify it into exactly ONE of these categories:
-- RELATIONAL: The query mentions a specific junior college / school name or acronym (e.g. RI, HCI, NYJC), or asks for NOTES from a specific year or about a specific topic. Schools: {schools} Topics: {topics}
-- VECTOR: The query is a conceptual economics question (e.g. definitions, explanations, comparisons, essays, diagrams). ANY question containing economic terms like "multiplier", "market failure", "elasticity", "demand", "supply", "policy", etc. MUST be VECTOR.
+
+- VECTOR: This is the DEFAULT category for most questions. If the user is asking for an explanation, definition, comparison, essay, or diagram (e.g., "explain...", "what is...", "compare..."), it MUST be VECTOR. This includes specific economic concepts like "the impossible trinity", "multiplier effect", "market failure", etc.
+- RELATIONAL: Only select this if the user is explicitly asking for files, notes, or papers from a library. This usually involves mentioning a school (e.g. RI, HCI, NYJC) AND asking for "notes", "papers", or "resources". Example: "Show me RI trade notes". 
 - DIRECT: The query is a general greeting (e.g. "hi", "hello"), off-topic chat, or does NOT relate to economics at all.
 
 Respond with ONLY the single word: RELATIONAL, VECTOR, or DIRECT. Nothing else.
@@ -28,12 +29,12 @@ def route_query(query: str) -> str:
     if any(greet in query_upper for greet in ["HI", "HELLO", "HEY", "THANKS", "THANK YOU", "BYE"]):
         return "DIRECT"
     
-    # JC Names (Relational)
-    from config import SCHOOL_ALIASES
-    if any(alias in query_upper for alias in SCHOOL_ALIASES.keys()):
-        return "RELATIONAL"
+    # Primary Conceptual Indicators (VECTOR)
+    # If they ask to EXPLAIN or WHAT IS, it's almost always conceptual (VECTOR)
+    if any(kw in query_upper for kw in ["EXPLAIN ", "WHAT IS ", "DEFINE ", "DESCRIBE "]):
+        return "VECTOR"
 
-    # 2. LLM Fallback
+    # 2. LLM Fallback (Let the model decide for complex cases)
     llm = ChatOpenAI(
         model=LLM_MODEL, 
         openai_api_key=API_KEY,
@@ -55,7 +56,7 @@ def route_query(query: str) -> str:
         return "DIRECT"
 
     # Extract the first valid category found in the response
-    for cat in ("RELATIONAL", "VECTOR", "DIRECT"):
+    for cat in ("VECTOR", "RELATIONAL", "DIRECT"):
         if cat in text:
             return cat
     return "DIRECT"  # fallback

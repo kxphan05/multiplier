@@ -12,10 +12,10 @@ import requests
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 
-from config import LLM_MODEL, RERANKER_MODEL, API_KEY, API_BASE_URL
+from config import LLM_MODEL, API_KEY, API_BASE_URL
 
 # ---------------------------------------------------------------------------
-# Reranker via Ollama
+# Reranker
 # ---------------------------------------------------------------------------
 
 def rerank_documents(query: str, docs: list[Document], top_k: int = 5) -> list[Document]:

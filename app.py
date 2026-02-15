@@ -11,7 +11,7 @@ from agent import stream_response
 # Page config
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="H2 Economics Tutor",
+    page_title="Multiplier - Your H2 Economics Tutor",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -90,7 +90,7 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 st.markdown("""
 <div class="main-header">
-    <h1>📊 H2 Economics Tutor</h1>
+    <h1>📊 Multiplier - Your H2 Economics Tutor</h1>
     <p>Ask me anything about H2 Economics — from market failure to macroeconomic policies</p>
 </div>
 """, unsafe_allow_html=True)

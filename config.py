@@ -14,7 +14,7 @@ LLM_MODEL = "allenai/Molmo2-8B"
 API_BASE_URL = "https://api.publicai.co/v1"
 API_KEY = os.getenv("PUBLICAI_API_KEY")
 RERANKER_MODEL = "dengcao/Qwen3-Reranker-0.6B:Q8_0"
-EMBEDDING_MODEL = "all-minilm:l6-v2"
+EMBEDDING_MODEL = "default"
 
 SQLITE_DB_PATH = "h2_economics_library.db"
 CHROMA_DB_PATH = "./chroma_db_h2econs"
