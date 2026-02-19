@@ -8,7 +8,9 @@ from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 
 from config import H2_ECON_TOPICS, LLM_MODEL, SCHOOL_ALIASES, SCHOOLS, API_KEY, API_BASE_URL
-from database import query_chroma_multi, run_sql_query
+from database import query_chroma_multi, run_sql_query, get_all_documents
+from langchain_community.retrievers import BM25Retriever
+from langchain_classic.retrievers.ensemble import EnsembleRetriever
 
 # ── Shared LLM factory ────────────────────────────────────────────────────
 def _llm(temperature: float = 0) -> ChatOpenAI:
@@ -156,19 +158,47 @@ def plan_retrieval(query: str) -> dict[str, Any]:
 
 
 def handle_vector(query: str) -> dict[str, Any]:
-    """Query decomposition + HyDE → multi-query Chroma retrieval."""
+    """Query decomposition + HyDE → Hybrid (Chroma + BM25) retrieval."""
     # 1. Consolidated planning call
     plan = plan_retrieval(query)
     
-    # 2. Retrieval
+    # 2. Retrieval queries
     all_queries = plan["sub_queries"] + [plan["hyde_text"]] if plan["hyde_text"] else plan["sub_queries"]
     if not all_queries:
         all_queries = [query]
         
-    docs = query_chroma_multi(all_queries, n_results=4)
+    # 3. Hybrid Retrieval
+    # Vector Search (Chroma)
+    vector_docs = query_chroma_multi(all_queries, n_results=4)
+    
+    # Keyword Search (BM25)
+    # Since the dataset is small (~113 docs), we build the index in-memory
+    all_docs = get_all_documents()
+    bm25_retriever = BM25Retriever.from_documents(all_docs)
+    bm25_retriever.k = 5
+    
+    # We use a manual ensemble to keep control over deduplication and weights
+    # especially since query_chroma_multi already does deduplication
+    bm25_docs = []
+    for q in all_queries:
+        bm25_docs.extend(bm25_retriever.invoke(q))
+    
+    # Simple Deduplication and RRF-like or Rank combination
+    # For now, we'll just merge and deduplicate, prioritizing Vector results
+    seen_content = {hash(d.page_content) for d in vector_docs}
+    combined_docs = list(vector_docs)
+    
+    for doc in bm25_docs:
+        h = hash(doc.page_content)
+        if h not in seen_content:
+            seen_content.add(h)
+            combined_docs.append(doc)
+            
+    # Limit final results
+    final_docs = combined_docs[:10]
     
     return {
-        "documents": docs,
+        "documents": final_docs,
         "needs_diagram": plan["needs_diagram"]
     }
 

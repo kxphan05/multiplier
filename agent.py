@@ -271,7 +271,15 @@ def generate_answer_stream(query: str, context_data: dict[str, Any]) -> Iterator
             "You are an expert H2 Economics tutor. Using ONLY the context below, "
             "provide a comprehensive, well-structured answer to the student's question. "
             "Use proper economics terminology and structure your answer with headers "
-            "where appropriate. If the context is insufficient, say so honestly."
+            "where appropriate. If the context is insufficient, say so honestly. "
+            "Use examples to illustrate your point as far as possible.\n\n"
+            "LATEX FORMATTING RULES:\n"
+            "1. ONLY use LaTeX for mathematical formulas, variables, and symbols (e.g., $PED$, $\\Delta$, $Q_d$).\n"
+            "2. NEVER use LaTeX for normal words or conversational text (e.g., do NOT write $demand$ or $market$).\n"
+            "3. ALWAYS wrap mathematical symbols like Delta in dollar signs: $\\Delta$. NEVER output raw backslash commands like \\Delta outside of dollar signs.\n"
+            "4. Use single dollar signs for inline math ($x$) and double dollar signs for block math ($$x$$).\n"
+            "5. Do NOT use brackets like \\( \\) or \\[ \\]."
+            "6. When using the $ sign to express the concept of dollars, remember to use \$ to avoid LaTeX"
         )
 
     user_msg = (

@@ -270,6 +270,12 @@ wheels = [
 ]
 
 [[package]]
+name = "bm25"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/b6/0a379faeb6ea5d23971b856d3c4b37e1c0e2359b6ec74624374db789fe68/BM25-1.0.0.tar.gz", hash = "sha256:f166fe46c7ff8ec0549116bc5654264a6e7f92bb61b2ee063a2b94fa6626f5e8", size = 1128, upload-time = "2019-06-12T05:27:08.752Z" }
+
+[[package]]
 name = "bs4"
 version = "0.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -556,6 +562,7 @@ name = "econs-data"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "bm25" },
     { name = "bs4" },
     { name = "chromadb" },
     { name = "duckduckgo-search" },
@@ -573,6 +580,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bm25", specifier = ">=1.0.0" },
     { name = "bs4", specifier = ">=0.0.2" },
     { name = "chromadb", specifier = ">=1.5.0" },
     { name = "duckduckgo-search", specifier = ">=7.0.0" },

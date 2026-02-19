@@ -83,3 +83,21 @@ def query_chroma_multi(queries: list[str], n_results: int = 4) -> list[Document]
                 seen.add(h)
                 docs.append(doc)
     return docs
+def get_all_documents() -> list[Document]:
+    """Fetch all rows from SQLite and convert to LangChain Documents."""
+    rows = run_sql_query("SELECT content, source, topic, year, doc_type FROM h2_econ_storage")
+    docs: list[Document] = []
+    for row in rows:
+        meta_str = (
+            f"Source: {row.get('source', 'Unknown')}\n"
+            f"Topic: {row.get('topic', 'Unknown')}\n"
+            f"Year: {row.get('year', 'Unknown')}\n"
+            f"Type: {row.get('doc_type', 'Unknown')}\n"
+            f"Content: "
+        )
+        content = row.get("content", "")
+        docs.append(Document(
+            page_content=f"{meta_str}{content}", 
+            metadata={k: v for k, v in row.items() if k != "content"}
+        ))
+    return docs
