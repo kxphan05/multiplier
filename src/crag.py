@@ -1,0 +1,106 @@
+"""
+Post-retrieval: reranking, Corrective RAG, and diagram injection.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import Any
+
+import requests
+from langchain_core.documents import Document
+from langchain_openai import ChatOpenAI
+
+from .config import LLM_MODEL, API_KEY, API_BASE_URL
+
+# ---------------------------------------------------------------------------
+# Reranker
+# ---------------------------------------------------------------------------
+
+
+def rerank_documents(
+    query: str, docs: list[Document], top_k: int = 5
+) -> list[Document]:
+    """Score all documents in a single LLM call for speed."""
+    if not docs:
+        return []
+
+    # Prepare a numbered list of document snippets
+    context_list = "\n".join(
+        f"[{i + 1}] {doc.page_content[:500]}" for i, doc in enumerate(docs[:10])
+    )
+
+    prompt = (
+        f"You are an H2 Economics expert. Given the query and the list of documents below, "
+        f"identify the top {top_k} most relevant documents to answer the query.\n\n"
+        f"Query: {query}\n\n"
+        f"Documents:\n{context_list}\n\n"
+        f"Respond with ONLY a comma-separated list of the document indices (e.g., 1, 3, 2). "
+        f"Rank them from most to least relevant."
+    )
+
+    try:
+        llm = ChatOpenAI(
+            model=LLM_MODEL,
+            openai_api_key=API_KEY,
+            openai_api_base=API_BASE_URL,
+            temperature=0,
+        )
+        resp = llm.invoke(prompt)
+        # Extract indices
+        indices = [int(n) for n in re.findall(r"\d+", resp.content)]
+
+        reranked = []
+        seen = set()
+        for idx in indices:
+            # Shift back to 0-indexed and bounds check
+            real_idx = idx - 1
+            if 0 <= real_idx < len(docs) and real_idx not in seen:
+                reranked.append(docs[real_idx])
+                seen.add(real_idx)
+
+        # If LLM failed to provide enough indices, fill with original order
+        if len(reranked) < top_k:
+            for i, doc in enumerate(docs):
+                if i not in seen:
+                    reranked.append(doc)
+                    seen.add(i)
+                if len(reranked) >= top_k:
+                    break
+
+        return reranked[:top_k]
+    except Exception:
+        # Fallback to original order
+        return docs[:top_k]
+
+
+# ---------------------------------------------------------------------------
+# DuckDuckGo diagram search
+# ---------------------------------------------------------------------------
+
+_DDG_URL = "https://api.duckduckgo.com/"
+
+
+def search_diagram(topic: str) -> str | None:
+    """Search DuckDuckGo for an economics diagram URL.
+
+    Returns the best image/source URL found, or None.
+    """
+    search_query = (
+        f"H2 Economics {topic} diagram site:wikimedia.org OR site:economicshelp.org"
+    )
+    try:
+        from duckduckgo_search import DDGS
+
+        with DDGS() as ddgs:
+            results = list(ddgs.images(search_query, max_results=3))
+            if results:
+                return results[0].get("image") or results[0].get("url")
+            # Fallback to text search for a link
+            text_results = list(ddgs.text(search_query, max_results=3))
+            if text_results:
+                return text_results[0].get("href")
+    except Exception:
+        pass
+    return None

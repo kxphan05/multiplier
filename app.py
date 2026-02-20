@@ -4,8 +4,8 @@ Streamlit UI for the H2 Economics RAG Chatbot.
 
 import streamlit as st
 
-from config import H2_ECON_TOPICS, LLM_MODEL, SCHOOLS
-from agent import stream_response
+from src.config import H2_ECON_TOPICS, LLM_MODEL, SCHOOLS
+from src.agent import stream_response
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -20,7 +20,8 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # Custom CSS
 # ---------------------------------------------------------------------------
-st.markdown("""
+st.markdown(
+    """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -83,17 +84,22 @@ st.markdown("""
         margin: 0.15rem;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
-st.markdown("""
+st.markdown(
+    """
 <div class="main-header">
     <h1>📊 Multiplier - Your H2 Economics Tutor</h1>
     <p>Ask me anything about H2 Economics — from market failure to macroeconomic policies</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -149,16 +155,16 @@ if prompt := st.chat_input("Ask an H2 Economics question..."):
     with st.chat_message("assistant"):
         response_placeholder = st.empty()
         full_response = ""
-        
+
         # 1. Retrieval phase with status updates
         context_data = None
         with st.status("Thinking...", expanded=True) as status:
             st.write("🔍 Analyzing query...")
             # Import here to avoid circular imports if any, or just standard usage
-            from agent import retrieve_context, generate_answer_stream
-            
+            from src.agent import retrieve_context, generate_answer_stream
+
             context_data = retrieve_context(prompt)
-            
+
             # Show what happened based on the route
             route = context_data.get("route", "DIRECT")
             if route == "RELATIONAL":
@@ -168,18 +174,23 @@ if prompt := st.chat_input("Ask an H2 Economics question..."):
                 st.write("🧠 Reranking documents for relevance...")
                 if context_data.get("needs_diagram"):
                     st.write("🖼️ Looking for relevant diagrams...")
-            
+
             status.update(label="Response ready!", state="complete", expanded=False)
 
         # 2. Generation phase
         try:
             if context_data is None:
-                st.error("❌ Error: Context data is missing. Retrieval failed silently.")
+                st.error(
+                    "❌ Error: Context data is missing. Retrieval failed silently."
+                )
             else:
-                full_response = st.write_stream(generate_answer_stream(prompt, context_data))
+                full_response = st.write_stream(
+                    generate_answer_stream(prompt, context_data)
+                )
         except Exception as e:
             st.error(f"❌ Error during generation: {str(e)}")
             import traceback
+
             st.code(traceback.format_exc())
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
