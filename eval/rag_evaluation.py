@@ -12,7 +12,6 @@ from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 from openai import OpenAI, AsyncOpenAI
 from ragas import evaluate
-from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import llm_factory
 from ragas.metrics import (
     AnswerCorrectness,
@@ -63,7 +62,7 @@ def run_rag_query(query: str) -> Dict[str, Any]:
     context_data = retrieve_context(query)
 
     # Get documents
-    docs = context_data.get("documents", context_data.get("documents", []))
+    docs = context_data.get("reranked_docs", context_data.get("documents", []))
     contexts = [doc.page_content for doc in docs]
 
     # Generate answer
