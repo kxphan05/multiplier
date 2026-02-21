@@ -28,7 +28,7 @@ from .config import (
     TOP_K,
     N_FILTER_DOCS,
 )
-from .crag import rerank_documents, search_diagram
+from .crag import rerank, search_diagram
 from .retrieval import handle_direct, handle_relational, handle_vector
 from .router import route_query
 
@@ -90,7 +90,7 @@ def node_filter(state: AgentState) -> dict[str, Any]:
     docs = state.get("documents", [])
     if RERANK:
         logger.info(f"Reranking {len(docs[:N_FILTER_DOCS])} documents...")
-        reranked = rerank_documents(state["query"], docs[:N_FILTER_DOCS], top_k=TOP_K)
+        reranked = rerank(state["query"], docs[:N_FILTER_DOCS], top_k=TOP_K)
         logger.info(f"Reranking complete. Top {len(reranked)} retained.")
         return {"reranked_docs": reranked}
     else:
@@ -391,7 +391,7 @@ def generate_answer_stream(query: str, context_data: dict[str, Any]) -> Iterator
             "3. ALWAYS wrap mathematical symbols like Delta in dollar signs: $\\Delta$. NEVER output raw backslash commands like \\Delta outside of dollar signs.\n"
             "4. Use single dollar signs for inline math ($x$) and double dollar signs for block math ($$x$$).\n"
             "5. Do NOT use brackets like \\( \\) or \\[ \\]."
-            "6. When using the $ sign to express the concept of dollars, remember to use \\\$ to avoid LaTeX"
+            "6. When using the $ sign to express the concept of dollars, remember to use \\$ to avoid LaTeX"
         )
 
     user_msg = (

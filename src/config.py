@@ -16,10 +16,11 @@ API_KEY = os.getenv("PUBLICAI_API_KEY")
 USE_RAG = (
     True  # If False, bypass retrieval entirely and use model's parametric knowledge
 )
-RERANK = False  # Whether to perform LLM-based reranking of retrieved documents
+RERANK = True  # Whether to perform reranking of retrieved documents
+JINA_RERANK = True  # If True, use Jina reranker; if False, use LLM-based reranking
 RERANK_API_ENDPOINT = "https://api.jina.ai/v1/rerank"
 RERANK_API_KEY = os.getenv("JINA_API_KEY")
-RERANK_MODEL = "jina/rerank-colbert-v2"  # Lightweight reranking model for cost efficiency
+RERANK_MODEL = "jina-reranker-v2-base-multilingual"
 
 EMBEDDING_MODEL = "default"
 TOP_K = 5  # Number of documents to return to the model
