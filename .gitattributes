@@ -1,5 +1,9 @@
 *.db filter=lfs diff=lfs merge=lfs -text
 *chroma_db filter=lfs diff=lfs merge=lfs -text
+<<<<<<< HEAD
 *.sqlite3 filter=lfs diff=lfs merge=lfs -text
 h2_economics_library.db filter=lfs diff=lfs merge=lfs -text
 chroma_db_h2econs/** filter=lfs diff=lfs merge=lfs -text
+=======
+*.sqlite3 filter=lfs diff=lfs merge=lfs -text
+>>>>>>> d572e8cf26ef1a544a466e9b4845095be4eafbc7
