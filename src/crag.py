@@ -12,7 +12,17 @@ import requests
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 
-from .config import LLM_MODEL, API_KEY, API_BASE_URL, N_FILTER_DOCS, TOP_K
+from .config import (
+    LLM_MODEL,
+    API_KEY,
+    API_BASE_URL,
+    N_FILTER_DOCS,
+    TOP_K,
+    RERANK_API_ENDPOINT,
+    RERANK_API_KEY,
+    RERANK_MODEL,
+    JINA_RERANK,
+)
 
 # ---------------------------------------------------------------------------
 # Reranker
@@ -78,6 +88,53 @@ def rerank_documents(
     except Exception:
         # Fallback to original order
         return docs[:top_k]
+
+
+def rerank_documents_jina(
+    query: str, docs: list[Document], top_k: int = TOP_K
+) -> list[Document]:
+    """Rerank documents using Jina Reranker API."""
+    if not docs:
+        return []
+
+    if not RERANK_API_KEY:
+        return docs[:top_k]
+
+    documents = [doc.page_content for doc in docs]
+
+    payload = {
+        "model": RERANK_MODEL,
+        "query": query,
+        "documents": documents,
+        "top_n": min(top_k, len(docs)),
+        "return_documents": False,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {RERANK_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    try:
+        response = requests.post(
+            RERANK_API_ENDPOINT, json=payload, headers=headers, timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        results = data.get("results", [])
+        reranked = [docs[r["index"]] for r in results if 0 <= r["index"] < len(docs)]
+        return reranked[:top_k]
+    except Exception:
+        return docs[:top_k]
+
+
+def rerank(query: str, docs: list[Document], top_k: int = TOP_K) -> list[Document]:
+    """Rerank documents using configured reranker (Jina or LLM)."""
+    if JINA_RERANK:
+        return rerank_documents_jina(query, docs, top_k=top_k)
+    return rerank_documents(query, docs, top_k=top_k)
 
 
 # ---------------------------------------------------------------------------

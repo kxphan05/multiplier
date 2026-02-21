@@ -23,7 +23,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from src.crag import rerank_documents
+from src.crag import rerank
 from src.database import query_chroma
 
 
@@ -670,9 +670,9 @@ def measure_retrieval_time(query: str, n_results: int = 6) -> float:
 
 
 def measure_rerank_time(query: str, docs: List[Document], top_k: int = 5) -> float:
-    """Measure time for LLM reranking."""
+    """Measure time for reranking."""
     start = time.perf_counter()
-    rerank_documents(query, docs, top_k=top_k)
+    rerank(query, docs, top_k=top_k)
     return time.perf_counter() - start
 
 
