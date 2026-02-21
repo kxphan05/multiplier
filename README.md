@@ -44,16 +44,18 @@ Ablation Study Results Summary
 | multi-hyde-5doc-rerank-crag | RAG, LLM reranking | ~1.9 | ~1.5 | ~8.6 | 0.51 | 0.12 |
 | multi-hyde-10>5doc-rerank | RAG, rerank from 10 docs to 5 | ~1.9 | ~1.6 | ~8.8 | 0.48 | 0.18 |
 | parametric | No RAG (model's parametric knowledge) | ~2.3 | N/A | ~8.9 | 0.0 | 0.0 |
-Key Observations:
-Latency:
+
+
+## Key Observations:
+### Latency:
 - JINA reranking is fastest (~0.6s rerank time)
 - LLM reranking is slower (~1.5-1.6s)
 - JINA reranking provides ~2-3x speedup over LLM reranking
-Quality (Weighted Score):
+### Quality (Weighted Score):
 - All RAG configurations with reranking score similarly (~8.6-8.8)
 - Parametric (no RAG) performs surprisingly well (~8.9)
 - No-rerank baseline has lowest quality (~7.1) due to one critical failure (weighted_score=0 for COVID vaccine question)
-Context Metrics:
+### Context Metrics:
 - JINA reranking achieves highest context precision (0.56)
 - Context recall is low across all RAG configurations (0.12-0.18)
 - Parametric has 0 context metrics since no retrieval occurs
