@@ -1,9 +1,9 @@
+from src.crag import rerank
+from src.database import query_chroma
 import json
 import logging
 import os
 import time
-from pathlib import Path
-from statistics import mean, median
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -22,9 +22,6 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-from src.crag import rerank
-from src.database import query_chroma
 
 
 class JudgePersona:
@@ -450,7 +447,7 @@ Format as JSON with keys: faithfulness, correctness, relevance, feedback""",
             content = response.choices[0].message.content
             try:
                 scores = json.loads(content)
-            except:
+            except json.JSONDecodeError:
                 scores = {
                     "faithfulness": 0,
                     "correctness": 0,
