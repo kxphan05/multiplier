@@ -2,23 +2,7 @@
 LangGraph agent – orchestrates routing, retrieval, reranking, CRAG, and
 final answer generation with streaming support.
 """
-
 from __future__ import annotations
-
-import operator
-import logging
-from typing import Annotated, Any, Iterator, TypedDict
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-from langchain_core.documents import Document
-from langchain_openai import ChatOpenAI
-from langgraph.graph import END, StateGraph
-
 from .config import (
     LLM_MODEL,
     API_KEY,
@@ -28,9 +12,23 @@ from .config import (
     TOP_K,
     N_FILTER_DOCS,
 )
+
 from .crag import rerank, search_diagram
 from .retrieval import handle_direct, handle_relational, handle_vector
 from .router import route_query
+
+import logging
+from typing import Annotated, Any, Iterator, TypedDict
+
+from langchain_core.documents import Document
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, StateGraph
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

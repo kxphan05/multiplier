@@ -10,14 +10,12 @@ from langchain_openai import ChatOpenAI
 from .config import (
     H2_ECON_TOPICS,
     LLM_MODEL,
-    SCHOOL_ALIASES,
     SCHOOLS,
     API_KEY,
     API_BASE_URL,
 )
 from .database import query_chroma_multi, run_sql_query, get_all_documents
 from langchain_community.retrievers import BM25Retriever
-from langchain_classic.retrievers.ensemble import EnsembleRetriever
 
 
 # ── Shared LLM factory ────────────────────────────────────────────────────

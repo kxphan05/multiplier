@@ -5,7 +5,6 @@ Streamlit UI for the H2 Economics RAG Chatbot.
 import streamlit as st
 
 from src.config import H2_ECON_TOPICS, LLM_MODEL, SCHOOLS
-from src.agent import stream_response
 
 # ---------------------------------------------------------------------------
 # Page config
