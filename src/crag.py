@@ -12,7 +12,7 @@ import requests
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 
-from .config import LLM_MODEL, API_KEY, API_BASE_URL
+from .config import LLM_MODEL, API_KEY, API_BASE_URL, N_FILTER_DOCS, TOP_K
 
 # ---------------------------------------------------------------------------
 # Reranker
@@ -20,16 +20,21 @@ from .config import LLM_MODEL, API_KEY, API_BASE_URL
 
 
 def rerank_documents(
-    query: str, docs: list[Document], top_k: int = 5
+    query: str, docs: list[Document], top_k: int = TOP_K
 ) -> list[Document]:
     """Score all documents in a single LLM call for speed."""
     if not docs:
         return []
 
-    # Prepare a numbered list of document snippets
-    context_list = "\n".join(
-        f"[{i + 1}] {doc.page_content[:500]}" for i, doc in enumerate(docs[:10])
-    )
+    if not N_FILTER_DOCS or len(docs) <= N_FILTER_DOCS:
+        context_list = "\n".join(
+            f"[{i + 1}] {doc.page_content[:500]}" for i, doc in enumerate(docs)
+        )
+    else:
+        context_list = "\n".join(
+            f"[{i + 1}] {doc.page_content[:500]}"
+            for i, doc in enumerate(docs[:N_FILTER_DOCS])
+        )
 
     prompt = (
         f"You are an H2 Economics expert. Given the query and the list of documents below, "
@@ -91,7 +96,7 @@ def search_diagram(topic: str) -> str | None:
         f"H2 Economics {topic} diagram site:wikimedia.org OR site:economicshelp.org"
     )
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
 
         with DDGS() as ddgs:
             results = list(ddgs.images(search_query, max_results=3))

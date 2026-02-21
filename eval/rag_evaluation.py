@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 
 from src.crag import rerank_documents
 from src.database import query_chroma
+from src.config import (
+    NUM_JUDGES,
+    JUDGE_TEMPERATURE,
+    RERANK,
+    N_FILTER_DOCS,
+    TOP_K,
+    USE_RAG,
+)
 
 
 class OpenRouterLLM:
@@ -63,6 +71,8 @@ def run_rag_query(query: str) -> Dict[str, Any]:
 
     # Get documents
     docs = context_data.get("reranked_docs", context_data.get("documents", []))
+    if docs == []:
+        docs = context_data.get("documents", [])
     contexts = [doc.page_content for doc in docs]
 
     # Generate answer
@@ -86,7 +96,14 @@ def evaluate_with_ragas(
     # Load eval data
     eval_df = load_eval_data(eval_csv)
 
-    evaluator_wrapper = llm_factory('allenai/Molmo2-8B', client=AsyncOpenAI(base_url="https://api.publicai.co/v1", api_key=openrouter_api_key), max_tokens=2048, temperature=0)
+    evaluator_wrapper = llm_factory(
+        "allenai/Molmo2-8B",
+        client=AsyncOpenAI(
+            base_url="https://api.publicai.co/v1", api_key=openrouter_api_key
+        ),
+        max_tokens=2048,
+        temperature=0,
+    )
 
     # Run RAG pipeline for each query
     answers = []
@@ -244,7 +261,14 @@ def run_unified_evaluation(
             contexts_list.append([])
 
     logger.info("Running RAGAS evaluation...")
-    evaluator_wrapper = llm_factory('allenai/Molmo2-8B', client=AsyncOpenAI(base_url="https://api.publicai.co/v1", api_key=openrouter_api_key), max_tokens=2048, temperature=0)
+    evaluator_wrapper = llm_factory(
+        "allenai/Molmo2-8B",
+        client=AsyncOpenAI(
+            base_url="https://api.publicai.co/v1", api_key=openrouter_api_key
+        ),
+        max_tokens=2048,
+        temperature=0,
+    )
 
     from datasets import Dataset as HFDataset
 
@@ -263,7 +287,7 @@ def run_unified_evaluation(
     ragas_df.to_csv(ragas_output, index=False)
     logger.info(f"RAGAS results saved to {ragas_output}")
 
-    logger.info("Running LLM judge evaluation...")
+    logger.info("Running LLM judge evaluation (3 judges with temperature 0.7)...")
     openrouter_client = OpenAI(
         base_url="https://api.publicai.co/v1", api_key=openrouter_api_key
     )
@@ -272,54 +296,105 @@ def run_unified_evaluation(
 
     for idx, row in eval_df.iterrows():
         try:
-            response = openrouter_client.chat.completions.create(
-                model="allenai/Molmo2-8B",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert economics tutor evaluating RAG answers. Rate from 1-10.",
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""Query: {row["query"]}
+            judge_scores_list: List[Dict] = []
+
+            for judge_num in range(NUM_JUDGES):
+                response = openrouter_client.chat.completions.create(
+                    model="allenai/Molmo2-8B",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert economics tutor evaluating RAG answers. Rate from 1-10.",
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""Query: {row["query"]}
 
 Ground Truth: {row["ground_truth"]}
 
 Generated Answer: {answers[idx]}
 
-Rate the answer on:
-1. Faithfulness (does it stick to the context?)
-2. Correctness it fact (isually accurate?)
-3. Relevance (does it answer the question?)
+### CRITICAL INSTRUCTION:
+Economic theory often allows for multiple valid perspectives. If the Generated Answer provides a logical, well-reasoned economic argument that differs from the Ground Truth but is theoretically sound within the H2 Economics syllabus (e.g., arguing inelastic vs elastic based on different valid assumptions), do NOT penalize the 'Correctness' score harshly.
 
-Format as JSON with keys: faithfulness, correctness, relevance, feedback""",
-                    },
-                ],
-                temperature=0,
-                max_tokens=500,
+### EVALUATION RUBRIC:
+1. Faithfulness (1-10): Stays grounded in the provided context/notes.
+2. Correctness (1-10): Economic logic is sound.
+3. Relevance (1-10): Directly answers the prompt.
+4. Singapore Context (1-10): Does the answer use Singapore-specific anchors? 
+   - High Score: Mentions MAS S$NEER (instead of interest rates), Small & Open Economy constraints, high MPS/CPF, or specific local examples (HDB, COE, NEWater).
+   - Low Score: Suggests generic policies (e.g. 'The central bank should lower interest rates') which are factually incorrect for the Singapore context.
+
+### OUTPUT FORMAT:
+Provide reasoning first, then JSON.
+{{
+  "reasoning": "...",
+  "faithfulness": <int>,
+  "correctness": <int>,
+  "relevance": <int>,
+  "singapore_relevance": <int>,
+  "feedback": "..."
+}}""",
+                        },
+                    ],
+                    temperature=JUDGE_TEMPERATURE,
+                    max_tokens=500,
+                )
+
+                content = response.choices[0].message.content
+                try:
+                    scores = json.loads(content)
+                except:
+                    scores = {
+                        "faithfulness": 0,
+                        "correctness": 0,
+                        "relevance": 0,
+                        "feedback": content,
+                    }
+                judge_scores_list.append(scores)
+
+            faithfulness_scores = [s.get("faithfulness", 0) for s in judge_scores_list]
+            correctness_scores = [s.get("correctness", 0) for s in judge_scores_list]
+            relevance_scores = [s.get("relevance", 0) for s in judge_scores_list]
+            sg_relevance_scores = [
+                s.get("singapore_relevance", 0) for s in judge_scores_list
+            ]  # NEW
+
+            avg_sg_relevance = mean(sg_relevance_scores)
+            avg_faithfulness = mean(faithfulness_scores)
+            avg_correctness = mean(correctness_scores)
+            avg_relevance = mean(relevance_scores)
+
+            combined_feedback = " | ".join(
+                f"Judge {i + 1}: {s.get('feedback', 'N/A')}"
+                for i, s in enumerate(judge_scores_list)
             )
-
-            content = response.choices[0].message.content
-            try:
-                scores = json.loads(content)
-            except:
-                scores = {
-                    "faithfulness": 0,
-                    "correctness": 0,
-                    "relevance": 0,
-                    "feedback": content,
-                }
+            combined_reasoning = " | ".join(
+                f"Judge {i + 1}: {s.get('reasoning', 'N/A')}"
+                for i, s in enumerate(judge_scores_list)
+            )
 
             judge_results.append(
                 {
                     "query": row["query"],
                     "ground_truth": row["ground_truth"],
                     "generated_answer": answers[idx],
-                    **scores,
+                    "faithfulness": round(avg_faithfulness, 2),
+                    "correctness": round(avg_correctness, 2),
+                    "relevance": round(avg_relevance, 2),
+                    "singapore_relevance": round(avg_sg_relevance, 2),
+                    "faithfulness_scores": faithfulness_scores,
+                    "correctness_scores": correctness_scores,
+                    "relevance_scores": relevance_scores,
+                    "singapore_relevance_scores": sg_relevance_scores,
+                    "reasoning": combined_reasoning,
+                    "feedback": combined_feedback,
                 }
             )
 
-            logger.info(f"LLM judge: {int(idx) + 1}/{len(eval_df)}")
+            logger.info(
+                f"LLM judge: {int(idx) + 1}/{len(eval_df)} (avg f={avg_faithfulness:.1f}, c={avg_correctness:.1f}, r={avg_relevance:.1f})"
+            )
 
         except Exception as e:
             logger.error(f"Error on query {idx}: {e}")

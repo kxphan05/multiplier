@@ -13,8 +13,13 @@ load_dotenv()
 LLM_MODEL = "allenai/Molmo2-8B"
 API_BASE_URL = "https://api.publicai.co/v1"
 API_KEY = os.getenv("PUBLICAI_API_KEY")
-RERANKER_MODEL = "dengcao/Qwen3-Reranker-0.6B:Q8_0"
+USE_RAG = (
+    True  # If False, bypass retrieval entirely and use model's parametric knowledge
+)
+RERANK = True  # Whether to perform LLM-based reranking of retrieved documents
 EMBEDDING_MODEL = "default"
+TOP_K = 5  # Number of documents to return to the model
+N_FILTER_DOCS = 10  # Number of documents to consider for reranking
 
 SQLITE_DB_PATH = "h2_economics_library.db"
 CHROMA_DB_PATH = "chroma_db_h2econs"
@@ -64,3 +69,7 @@ H2_ECON_TOPICS: list[str] = [
     "Macroeconomic Policies (Fiscal, Monetary, Supply-side)",
     "The International Economy (Trade, BOP, Exchange Rates, Globalisation)",
 ]
+
+# Evaluation
+NUM_JUDGES = 3
+JUDGE_TEMPERATURE = 0.9

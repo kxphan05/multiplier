@@ -19,7 +19,15 @@ from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
-from .config import LLM_MODEL, API_KEY, API_BASE_URL
+from .config import (
+    LLM_MODEL,
+    API_KEY,
+    API_BASE_URL,
+    USE_RAG,
+    RERANK,
+    TOP_K,
+    N_FILTER_DOCS,
+)
 from .crag import rerank_documents, search_diagram
 from .retrieval import handle_direct, handle_relational, handle_vector
 from .router import route_query
@@ -78,12 +86,16 @@ def node_direct(state: AgentState) -> dict[str, Any]:
     return {"response": response}
 
 
-def node_rerank(state: AgentState) -> dict[str, Any]:
+def node_filter(state: AgentState) -> dict[str, Any]:
     docs = state.get("documents", [])
-    logger.info(f"Reranking {len(docs)} documents...")
-    reranked = rerank_documents(state["query"], docs, top_k=5)
-    logger.info(f"Reranking complete. Top {len(reranked)} retained.")
-    return {"reranked_docs": reranked}
+    if RERANK:
+        logger.info(f"Reranking {len(docs[:N_FILTER_DOCS])} documents...")
+        reranked = rerank_documents(state["query"], docs[:N_FILTER_DOCS], top_k=TOP_K)
+        logger.info(f"Reranking complete. Top {len(reranked)} retained.")
+        return {"reranked_docs": reranked}
+    else:
+        logger.info(f"Skipping rerank. Returning top {TOP_K} documents.")
+        return {"reranked_docs": docs[:TOP_K]}
 
 
 # node_crag removed - sufficiency and diagram logic moved to retrieval planning and generation
@@ -92,10 +104,8 @@ def node_rerank(state: AgentState) -> dict[str, Any]:
 def node_generate(state: AgentState) -> dict[str, Any]:
     """Build context and generate the final answer."""
     route = state.get("route", "VECTOR")
-    # docs = state.get("reranked_docs", state.get("documents", []))
-    docs = state.get("documents", state.get("documents", []))
+    docs = state.get("reranked_docs", state.get("documents", []))
 
-    # Use more context for RELATIONAL queries (likely lists)
     limit = 15 if route == "RELATIONAL" else 5
     context = "\n\n---\n\n".join(d.page_content for d in docs[:limit])
 
@@ -138,6 +148,29 @@ def node_generate(state: AgentState) -> dict[str, Any]:
     return {"response": resp.content}
 
 
+def node_generate_parametric(state: AgentState) -> dict[str, Any]:
+    """Generate answer using only model's parametric knowledge (no retrieval)."""
+    logger.info("Generating answer using parametric knowledge (no RAG)...")
+
+    system_msg = (
+        "You are an expert H2 Economics tutor. Answer the student's question using your "
+        "knowledge. Use proper economics terminology and structure your answer with headers "
+        "where appropriate. If you are uncertain about something, say so honestly."
+    )
+
+    user_msg = f"Student question: {state['query']}"
+    prompt = f"System: {system_msg}\nUser: {user_msg}"
+
+    llm = ChatOpenAI(
+        model=LLM_MODEL,
+        openai_api_key=API_KEY,
+        openai_api_base=API_BASE_URL,
+        temperature=0.3,
+    )
+    resp = llm.invoke(prompt)
+    return {"response": resp.content}
+
+
 # ---------------------------------------------------------------------------
 # Routing condition
 # ---------------------------------------------------------------------------
@@ -155,66 +188,99 @@ def route_condition(state: AgentState) -> str:
 def build_graph(include_generate: bool = True) -> StateGraph:
     g = StateGraph(AgentState)
 
-    # Nodes
     g.add_node("route", node_route)
-    g.add_node("relational", node_relational)
-    g.add_node("vector", node_vector)
     g.add_node("direct", node_direct)
-    g.add_node("rerank", node_rerank)
 
     if include_generate:
-        g.add_node("generate", node_generate)
-
-    # Edges
-    g.set_entry_point("route")
-    g.add_conditional_edges(
-        "route",
-        route_condition,
-        {
-            "RELATIONAL": "relational",
-            "VECTOR": "vector",
-            "DIRECT": "direct",
-        },
-    )
-
-    # Relational / Vector → rerank
-    g.add_edge("relational", "rerank")
-    g.add_edge("vector", "rerank")
-
-    if include_generate:
-        g.add_edge("rerank", "generate")
-        g.add_edge("generate", END)
+        if USE_RAG:
+            g.add_node("relational", node_relational)
+            g.add_node("vector", node_vector)
+            g.add_node("filter", node_filter)
+            g.add_node("generate", node_generate)
+        else:
+            g.add_node("generate", node_generate_parametric)
     else:
-        # If we skip generation (for streaming), end at rerank
-        g.add_edge("rerank", END)
+        if USE_RAG:
+            g.add_node("relational", node_relational)
+            g.add_node("vector", node_vector)
+            g.add_node("filter", node_filter)
 
-    # g.add_edge("relational", END)
-    # g.add_edge("vector", END)
+    g.set_entry_point("route")
 
-    # Direct → END
+    if USE_RAG:
+        g.add_conditional_edges(
+            "route",
+            route_condition,
+            {
+                "RELATIONAL": "relational",
+                "VECTOR": "vector",
+                "DIRECT": "direct",
+            },
+        )
+        g.add_edge("relational", "filter")
+        g.add_edge("vector", "filter")
+
+        if include_generate:
+            g.add_edge("filter", "generate")
+            g.add_edge("generate", END)
+        else:
+            g.add_edge("filter", END)
+    else:
+        g.add_conditional_edges(
+            "route",
+            route_condition,
+            {
+                "RELATIONAL": "generate" if include_generate else END,
+                "VECTOR": "generate" if include_generate else END,
+                "DIRECT": "direct",
+            },
+        )
+        if include_generate:
+            g.add_edge("generate", END)
+
     g.add_edge("direct", END)
 
     return g
 
 
-# Compiled graph singletons
-_compiled_graph_full = None
-_compiled_graph_retrieval_only = None
+_compiled_graph_rag_full = None
+_compiled_graph_rag_retrieval = None
+_compiled_graph_parametric = None
 
 
 def get_graph(include_generate: bool = True):
-    global _compiled_graph_full, _compiled_graph_retrieval_only
+    global \
+        _compiled_graph_rag_full, \
+        _compiled_graph_rag_retrieval, \
+        _compiled_graph_parametric
 
-    if include_generate:
-        if _compiled_graph_full is None:
-            _compiled_graph_full = build_graph(include_generate=True).compile()
-        return _compiled_graph_full
+    if USE_RAG:
+        if include_generate:
+            if _compiled_graph_rag_full is None:
+                _compiled_graph_rag_full = build_graph(include_generate=True).compile()
+            return _compiled_graph_rag_full
+        else:
+            if _compiled_graph_rag_retrieval is None:
+                _compiled_graph_rag_retrieval = build_graph(
+                    include_generate=False
+                ).compile()
+            return _compiled_graph_rag_retrieval
     else:
-        if _compiled_graph_retrieval_only is None:
-            _compiled_graph_retrieval_only = build_graph(
-                include_generate=False
-            ).compile()
-        return _compiled_graph_retrieval_only
+        if include_generate:
+            if _compiled_graph_parametric is None:
+                _compiled_graph_parametric = build_graph(
+                    include_generate=True
+                ).compile()
+            return _compiled_graph_parametric
+        else:
+            logger.warning(
+                "USE_RAG=False with include_generate=False has no effect; returning full graph"
+            )
+            if _compiled_graph_parametric is None:
+                _compiled_graph_parametric = build_graph(
+                    include_generate=True
+                ).compile()
+            return _compiled_graph_parametric
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +289,10 @@ def get_graph(include_generate: bool = True):
 
 
 def retrieve_context(query: str) -> dict[str, Any]:
-    """Execute the retrieval graph (routing, retrieval, reranking, CRAG)."""
+    """Execute the retrieval graph (routing, retrieval, reranking)."""
+    if not USE_RAG:
+        logger.info("USE_RAG=False, skipping retrieval entirely.")
+        return {"query": query, "route": "VECTOR", "reranked_docs": []}
     graph = get_graph(include_generate=False)
     return graph.invoke({"query": query})
 
@@ -232,7 +301,6 @@ def generate_answer_stream(query: str, context_data: dict[str, Any]) -> Iterator
     """Generate the answer streaming, using context from retrieve_context."""
     logger.info("Starting answer generation stream...")
 
-    # If direct route, yield the response as-is (already in context_data)
     if context_data.get("route") == "DIRECT":
         logger.info("Route is DIRECT, simulating streaming of pre-generated response.")
         response_text = context_data.get("response", "")
@@ -241,7 +309,6 @@ def generate_answer_stream(query: str, context_data: dict[str, Any]) -> Iterator
                 "I'm sorry, I couldn't generate a response. Please try again."
             )
 
-        # Simulate streaming for consistent UI experience
         import time
 
         for word in response_text.split(" "):
@@ -249,22 +316,50 @@ def generate_answer_stream(query: str, context_data: dict[str, Any]) -> Iterator
             time.sleep(0.02)
         return
 
-    # For retrieval routes, generate the answer with streaming
+    if not USE_RAG:
+        logger.info("Generating answer using parametric knowledge (no RAG)...")
+        system_msg = (
+            "You are an expert H2 Economics tutor. Answer the student's question using your "
+            "knowledge. Use proper economics terminology and structure your answer with headers "
+            "where appropriate. If you are uncertain about something, say so honestly.\n\n"
+            "LATEX FORMATTING RULES:\n"
+            "1. ONLY use LaTeX for mathematical formulas, variables, and symbols (e.g., $PED$, $\\Delta$, $Q_d$).\n"
+            "2. NEVER use LaTeX for normal words or conversational text (e.g., do NOT write $demand$ or $market$).\n"
+            "3. ALWAYS wrap mathematical symbols like Delta in dollar signs: $\\Delta$. NEVER output raw backslash commands like \\Delta outside of dollar signs.\n"
+            "4. Use single dollar signs for inline math ($x$) and double dollar signs for block math ($$x$$).\n"
+            "5. Do NOT use brackets like \\( \\) or \\[ \\]."
+            "6. When using the $ sign to express the concept of dollars, remember to use \\\$ to avoid LaTeX"
+        )
+        user_msg = f"Student question: {query}"
+        prompt = f"System: {system_msg}\nUser: {user_msg}"
+
+        try:
+            llm = ChatOpenAI(
+                model=LLM_MODEL,
+                openai_api_key=API_KEY,
+                openai_api_base=API_BASE_URL,
+                temperature=0.3,
+                streaming=True,
+            )
+            for chunk in llm.stream(prompt):
+                yield chunk.content
+        except Exception as e:
+            logger.error(f"Error during parametric generation streaming: {e}")
+            yield f"\n\n**Error:** {str(e)}"
+        return
+
     route = context_data.get("route", "VECTOR")
-    # docs = context_data.get("reranked_docs", context_data.get("documents", []))
-    docs = context_data.get("documents", context_data.get("documents", []))
+    docs = context_data.get("reranked_docs", context_data.get("documents", []))
     logger.info(
         f"Generating answer with {len(docs)} documents in context (Route: {route})."
     )
 
-    # Late-search for diagram if needed
     diagram_url = None
     if context_data.get("needs_diagram"):
         logger.info("Searching for diagram...")
         diagram_url = search_diagram(query)
         logger.info(f"Diagram found: {diagram_url}")
 
-    # Use more context for RELATIONAL queries
     limit = 15 if route == "RELATIONAL" else 5
     context = "\n\n---\n\n".join(d.page_content for d in docs[:limit])
 
@@ -295,7 +390,7 @@ def generate_answer_stream(query: str, context_data: dict[str, Any]) -> Iterator
             "3. ALWAYS wrap mathematical symbols like Delta in dollar signs: $\\Delta$. NEVER output raw backslash commands like \\Delta outside of dollar signs.\n"
             "4. Use single dollar signs for inline math ($x$) and double dollar signs for block math ($$x$$).\n"
             "5. Do NOT use brackets like \\( \\) or \\[ \\]."
-            "6. When using the $ sign to express the concept of dollars, remember to use \$ to avoid LaTeX"
+            "6. When using the $ sign to express the concept of dollars, remember to use \\\$ to avoid LaTeX"
         )
 
     user_msg = (
