@@ -16,10 +16,14 @@ API_KEY = os.getenv("PUBLICAI_API_KEY")
 USE_RAG = (
     True  # If False, bypass retrieval entirely and use model's parametric knowledge
 )
-RERANK = True  # Whether to perform LLM-based reranking of retrieved documents
+RERANK = False  # Whether to perform LLM-based reranking of retrieved documents
+RERANK_API_ENDPOINT = "https://api.jina.ai/v1/rerank"
+RERANK_API_KEY = os.getenv("JINA_API_KEY")
+RERANK_MODEL = "jina/rerank-colbert-v2"  # Lightweight reranking model for cost efficiency
+
 EMBEDDING_MODEL = "default"
 TOP_K = 5  # Number of documents to return to the model
-N_FILTER_DOCS = 10  # Number of documents to consider for reranking
+N_FILTER_DOCS = None  # Number of documents to consider for reranking
 
 SQLITE_DB_PATH = "h2_economics_library.db"
 CHROMA_DB_PATH = "chroma_db_h2econs"

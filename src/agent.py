@@ -156,6 +156,7 @@ def node_generate_parametric(state: AgentState) -> dict[str, Any]:
         "You are an expert H2 Economics tutor. Answer the student's question using your "
         "knowledge. Use proper economics terminology and structure your answer with headers "
         "where appropriate. If you are uncertain about something, say so honestly."
+        "Use Singaporean examples to illustrate your points where possible.\n\n"
     )
 
     user_msg = f"Student question: {state['query']}"
@@ -328,7 +329,7 @@ def generate_answer_stream(query: str, context_data: dict[str, Any]) -> Iterator
             "3. ALWAYS wrap mathematical symbols like Delta in dollar signs: $\\Delta$. NEVER output raw backslash commands like \\Delta outside of dollar signs.\n"
             "4. Use single dollar signs for inline math ($x$) and double dollar signs for block math ($$x$$).\n"
             "5. Do NOT use brackets like \\( \\) or \\[ \\]."
-            "6. When using the $ sign to express the concept of dollars, remember to use \\\$ to avoid LaTeX"
+            "6. When using the $ sign to express the concept of dollars, remember to use \\$ to avoid LaTeX"
         )
         user_msg = f"Student question: {query}"
         prompt = f"System: {system_msg}\nUser: {user_msg}"
