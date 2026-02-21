@@ -27,4 +27,5 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "datasets>=4.5.0",
     "ddgs>=9.10.0",
+    "pytest>=9.0.2",
 ]
